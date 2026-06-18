@@ -238,9 +238,6 @@
 </div>
 
 <script>
-// ══════════════════════════════════════════════════
-//  GRUPOS MUNDIAL 2026 — 12 grupos, 4 equipos c/u
-// ══════════════════════════════════════════════════
 const GRUPOS_REAL = {
   A:{equipos:[["🇲🇽","México"],["🇺🇸","EE.UU."],["🇨🇦","Canadá"],["🇩🇿","Argelia"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
   B:{equipos:[["🇦🇷","Argentina"],["🇲🇦","Marruecos"],["🇺🇾","Uruguay"],["🇪🇨","Ecuador"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
@@ -256,54 +253,76 @@ const GRUPOS_REAL = {
   L:{equipos:[["🇩🇰","Dinamarca"],["🇸🇰","Eslovaquia"],["🇷🇴","Rumania"],["🇬🇷","Grecia"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
 };
 
-// ══════════════════════════════════════════════════
-//  BRACKET 32 EQUIPOS
-//  24 clasificados (1° y 2° de cada grupo A-L) +
-//  8 mejores terceros = 16 partidos ronda de 32
-// ══════════════════════════════════════════════════
-// Emparejamientos de la Ronda de 32 (32 slots = 16 partidos)
 const BRACKET_INIT = [
-  // Llave 1 (partidos 1-8)
-  "1°A",  "2°B",
-  "1°C",  "2°D",
-  "1°E",  "2°F",
-  "1°G",  "2°H",
-  "1°I",  "2°J",
-  "1°K",  "2°L",
-  "1°B",  "3°(A/B/C)",
-  "1°D",  "3°(D/E/F)",
-  // Llave 2 (partidos 9-16)
-  "2°A",  "3°(G/H/I)",
-  "2°C",  "3°(J/K/L)",
-  "2°E",  "1°F",
-  "2°G",  "1°H",
-  "2°I",  "1°J",
-  "2°K",  "1°L",
-  "2°L",  "3°(mix1)",
-  "2°J",  "3°(mix2)",
+  "1°A","2°B","1°C","2°D","1°E","2°F","1°G","2°H",
+  "1°I","2°J","1°K","2°L","1°B","3°(A/B/C)","1°D","3°(D/E/F)",
+  "2°A","3°(G/H/I)","2°C","3°(J/K/L)","2°E","1°F","2°G","1°H",
+  "2°I","1°J","2°K","1°L","2°L","3°(mix1)","2°J","3°(mix2)",
 ];
-
 const RONDAS = ['Ronda de 32','Octavos','Cuartos','Semis','Final'];
-const RONDA_COUNTS = [16, 8, 4, 2, 1];
-
+const RONDA_COUNTS = [16,8,4,2,1];
 let bracketState = {};
 
-// ══════════════════════════════════════════════════
-//  PERSISTENCIA
-// ══════════════════════════════════════════════════
+// == JSONBIN DB ==
+const JBKEY = '$2a$10$leh0QIWHdFKfO/isXO5vdOWy4sQfd1nHKkFJfvJEZLu7Y7tj.iGOC';
+const JBURL = 'https://api.jsonbin.io/v3/b';
+let BIN_ID = null;
+let _db = null;
 let currentUser = null;
-const _mem = {};
-function _lsGet(k){try{return localStorage.getItem(k);}catch(e){return _mem[k]||null;}}
-function _lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){_mem[k]=v;}}
-function _lsDel(k){try{localStorage.removeItem(k);}catch(e){delete _mem[k];}}
-function getUsers(){return JSON.parse(_lsGet('pm26_users')||'{}');}
-function saveUsers(u){_lsSet('pm26_users',JSON.stringify(u));}
-function getUserData(u){return JSON.parse(_lsGet('pm26_data_'+u)||'{"grupos":{},"bracket":{},"campeon":""}');}
-function saveUserData(u,d){_lsSet('pm26_data_'+u,JSON.stringify(d));}
 
-// ══════════════════════════════════════════════════
-//  AUTH
-// ══════════════════════════════════════════════════
+function setLoading(on, msg){
+  let el = document.getElementById('loading-overlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'loading-overlay';
+    el.style.cssText='position:fixed;inset:0;background:rgba(10,22,40,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-size:1rem;color:#e8edf5;gap:12px;';
+    el.innerHTML='<div style="font-size:2rem">⚽</div><div id="loading-msg"></div>';
+    document.body.appendChild(el);
+  }
+  el.style.display = on ? 'flex' : 'none';
+  if(msg) document.getElementById('loading-msg').textContent = msg;
+}
+
+async function dbLoad(){
+  setLoading(true,'Conectando...');
+  try {
+    BIN_ID = localStorage.getItem('pm26_bin');
+    if(BIN_ID){
+      const r = await fetch(JBURL+'/'+BIN_ID+'/latest',{headers:{'X-Master-Key':JBKEY}});
+      if(r.ok){ const j=await r.json(); _db=j.record; setLoading(false); return; }
+    }
+    // Crear bin nuevo
+    const r = await fetch(JBURL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Master-Key':JBKEY,'X-Bin-Name':'penka2026'},
+      body:JSON.stringify({users:{},data:{}})
+    });
+    const j = await r.json();
+    BIN_ID = j.metadata.id;
+    localStorage.setItem('pm26_bin', BIN_ID);
+    _db = j.record;
+  } catch(e){ _db={users:{},data:{}}; }
+  setLoading(false);
+}
+
+async function dbSave(){
+  if(!BIN_ID) return;
+  await fetch(JBURL+'/'+BIN_ID,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
+    body:JSON.stringify(_db)
+  });
+}
+
+function getUsers(){ return (_db&&_db.users)||{}; }
+function getUserData(u){ return (_db&&_db.data&&_db.data[u])||{grupos:{},bracket:{},campeon:''}; }
+async function saveUserData(u,d){
+  if(!_db.data) _db.data={};
+  _db.data[u]=d;
+  await dbSave();
+}
+
+// == AUTH ==
 let authMode='register';
 function showError(msg){const e=document.getElementById('error-box');e.textContent=msg;e.style.display='block';setTimeout(()=>e.style.display='none',3500);}
 function toggleAuth(){
@@ -313,7 +332,8 @@ function toggleAuth(){
   document.getElementById('auth-subtitle').textContent=authMode==='register'?'Regístrate para hacer tus predicciones del Mundial':'Ingresa con tu cuenta';
   document.getElementById('error-box').style.display='none';
 }
-function register(){
+
+async function register(){
   const user=document.getElementById('reg-user').value.trim().toLowerCase();
   const pass=document.getElementById('reg-pass').value;
   const pass2=document.getElementById('reg-pass2').value;
@@ -323,28 +343,36 @@ function register(){
   if(pass!==pass2)return showError('Las contraseñas no coinciden');
   const users=getUsers();
   if(users[user])return showError('Este usuario ya existe');
+  setLoading(true,'Creando cuenta...');
   users[user]={pass,created:Date.now()};
-  saveUsers(users);currentUser=user;
-  _lsSet('pm26_session',user);loadApp();
+  _db.users=users;
+  await dbSave();
+  setLoading(false);
+  currentUser=user;
+  localStorage.setItem('pm26_session',user);
+  loadApp();
 }
-function login(){
+
+async function login(){
   const user=document.getElementById('log-user').value.trim().toLowerCase();
   const pass=document.getElementById('log-pass').value;
+  setLoading(true,'Verificando...');
+  await dbLoad();
   const users=getUsers();
+  setLoading(false);
   if(!users[user]||users[user].pass!==pass)return showError('Usuario o contraseña incorrectos');
-  currentUser=user;_lsSet('pm26_session',user);loadApp();
+  currentUser=user;localStorage.setItem('pm26_session',user);loadApp();
 }
+
 function logout(){
-  currentUser=null;_lsDel('pm26_session');
+  currentUser=null;localStorage.removeItem('pm26_session');
   document.getElementById('auth-section').style.display='block';
   document.getElementById('app-section').style.display='none';
   document.getElementById('navbar').style.display='none';
   document.getElementById('tabbar').style.display='none';
 }
 
-// ══════════════════════════════════════════════════
-//  TABS
-// ══════════════════════════════════════════════════
+// == TABS ==
 function showTab(name,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -365,54 +393,31 @@ function loadApp(){
   renderInicio();
 }
 
-// ══════════════════════════════════════════════════
-//  INICIO
-// ══════════════════════════════════════════════════
+// == INICIO ==
 function renderInicio(){
   const users=getUsers();
   const d=getUserData(currentUser);
   let gruposPred=0;
   Object.values(d.grupos||{}).forEach(g=>Object.values(g).forEach(p=>{if(p.local!==''&&p.visitante!=='')gruposPred++;}));
-
   document.getElementById('hero-stats').innerHTML=`
-    <div class="stat-card">
-      <div class="stat-label">Partidos predichos</div>
-      <div class="stat-val">${gruposPred}</div>
-      <div class="stat-sub">de 72 partidos de grupos</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Mi campeón</div>
-      <div class="stat-val" style="font-size:1.4rem">${d.campeon||'—'}</div>
-      <div class="stat-sub">${d.campeon?'✔ seleccionado':'pendiente en bracket'}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Participantes</div>
-      <div class="stat-val">${Object.keys(users).length}</div>
-      <div class="stat-sub">jugando en esta penka</div>
-    </div>`;
-
+    <div class="stat-card"><div class="stat-label">Partidos predichos</div><div class="stat-val">${gruposPred}</div><div class="stat-sub">de 72 partidos de grupos</div></div>
+    <div class="stat-card"><div class="stat-label">Mi campeón</div><div class="stat-val" style="font-size:1.4rem">${d.campeon||'—'}</div><div class="stat-sub">${d.campeon?'✔ seleccionado':'pendiente en bracket'}</div></div>
+    <div class="stat-card"><div class="stat-label">Participantes</div><div class="stat-val">${Object.keys(users).length}</div><div class="stat-sub">jugando en esta penka</div></div>`;
   const ranking=Object.keys(users).map(u=>{
     const dd=getUserData(u);let c=0;
     Object.values(dd.grupos||{}).forEach(g=>Object.values(g).forEach(p=>{if(p.local!==''&&p.visitante!=='')c++;}));
     return{user:u,pred:c};
   }).sort((a,b)=>b.pred-a.pred).slice(0,5);
-
   document.getElementById('ranking-preview').innerHTML=ranking.length===0
     ?'<div class="empty-state"><div class="icon">🏆</div>Aún no hay predicciones</div>'
     :ranking.map((r,i)=>{
       const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
       const m=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
-      return`<div class="rank-item">
-        <div class="rank-pos ${pc}">${m||i+1}</div>
-        <div class="rank-name">${r.user}${r.user===currentUser?' <span style="color:var(--dorado-claro);font-size:.75rem">← tú</span>':''}</div>
-        <div class="rank-pts">${r.pred} <span>pred.</span></div>
-      </div>`;
+      return`<div class="rank-item"><div class="rank-pos ${pc}">${m||i+1}</div><div class="rank-name">${r.user}${r.user===currentUser?' <span style="color:var(--dorado-claro);font-size:.75rem">← tú</span>':''}</div><div class="rank-pts">${r.pred} <span>pred.</span></div></div>`;
     }).join('');
 }
 
-// ══════════════════════════════════════════════════
-//  GRUPOS
-// ══════════════════════════════════════════════════
+// == GRUPOS ==
 function renderGrupos(){
   const d=getUserData(currentUser);
   const grupos=d.grupos||{};
@@ -441,27 +446,13 @@ function renderGrupos(){
         <div class="bonus-panel" id="bonus-${pid}">
           <div class="bonus-title">🎯 Sistema de puntos</div>
           <div class="winner-probs">
-            <div class="prob-pill">
-              <div class="pteam">${nA}</div>
-              <div class="ppts" id="pts-local-${pid}">—</div>
-              <div class="pprob">pts si gana</div>
-            </div>
-            <div class="prob-pill empate">
-              <div class="pteam">Empate</div>
-              <div class="ppts" id="pts-emp-${pid}">7</div>
-              <div class="pprob">pts si empata</div>
-            </div>
-            <div class="prob-pill">
-              <div class="pteam">${nB}</div>
-              <div class="ppts" id="pts-visitante-${pid}">—</div>
-              <div class="pprob">pts si gana</div>
-            </div>
+            <div class="prob-pill"><div class="pteam">${nA}</div><div class="ppts">10</div><div class="pprob">pts si gana</div></div>
+            <div class="prob-pill empate"><div class="pteam">Empate</div><div class="ppts">7</div><div class="pprob">pts si empata</div></div>
+            <div class="prob-pill"><div class="pteam">${nB}</div><div class="ppts">10</div><div class="pprob">pts si gana</div></div>
           </div>
           <div style="margin-top:10px;">
             <div class="bonus-title">✨ Bonificaciones adicionales</div>
             <div class="bonus-grid">
-              <div class="bonus-name"><span class="dot" style="background:#f0b429"></span>Acertar el ganador</div><div class="bonus-pts pts-base">base</div>
-              <div class="bonus-divider"></div>
               <div class="bonus-name"><span class="dot" style="background:#25a366"></span>Marcador exacto</div><div class="bonus-pts pts-green">+5</div>
               <div class="bonus-name"><span class="dot" style="background:#2d6be4"></span>Goles del ganador exactos</div><div class="bonus-pts pts-blue">+3</div>
               <div class="bonus-name"><span class="dot" style="background:#00cec9"></span>Diferencia de goles exacta</div><div class="bonus-pts pts-cyan">+2</div>
@@ -477,7 +468,7 @@ function renderGrupos(){
   });
 }
 
-function saveGrupos(){
+async function saveGrupos(){
   const d=getUserData(currentUser);
   if(!d.grupos)d.grupos={};
   document.querySelectorAll('.score-input').forEach(inp=>{
@@ -486,44 +477,37 @@ function saveGrupos(){
     if(!d.grupos[grupo][pid])d.grupos[grupo][pid]={local:'',visitante:''};
     d.grupos[grupo][pid][side]=inp.value;
   });
-  saveUserData(currentUser,d);
   const btn=document.getElementById('save-grupos-btn');
-  btn.textContent='✅ Guardado!';btn.style.background='var(--verde-claro)';
+  btn.textContent='⏳ Guardando...';btn.disabled=true;
+  await saveUserData(currentUser,d);
+  btn.textContent='✅ Guardado!';btn.style.background='var(--verde-claro)';btn.disabled=false;
   setTimeout(()=>{btn.textContent='💾 Guardar predicciones';btn.style.background='';},2000);
 }
 
-// ══════════════════════════════════════════════════
-//  BRACKET — 32 equipos, 5 rondas
-// ══════════════════════════════════════════════════
+function toggleBonus(pid){
+  const panel=document.getElementById('bonus-'+pid);
+  if(!panel)return;
+  panel.classList.toggle('open');
+}
+
+// == BRACKET ==
 function renderBracket(){
   const d=getUserData(currentUser);
   bracketState=d.bracket||{};
-
-  // Ronda 0: 32 slots (BRACKET_INIT)
-  if(!bracketState[0]||bracketState[0].length<32){
-    bracketState[0]=[...BRACKET_INIT];
-  }
-
+  if(!bracketState[0]||bracketState[0].length<32) bracketState[0]=[...BRACKET_INIT];
   const container=document.getElementById('bracket');
   container.innerHTML='';
-
   RONDAS.forEach((ronda,ri)=>{
     const col=document.createElement('div');
     col.className='ronda';
     col.innerHTML=`<div class="ronda-title">${ronda}</div><div class="ronda-matches" id="ronda-${ri}"></div>`;
     container.appendChild(col);
   });
-
   for(let ri=0;ri<5;ri++) renderRonda(ri);
-
   const campeon=bracketState[5]&&bracketState[5][0];
   const box=document.getElementById('campeon-box');
-  if(campeon){
-    box.style.display='block';
-    document.getElementById('campeon-nombre').textContent=campeon;
-  } else {
-    box.style.display='none';
-  }
+  if(campeon){box.style.display='block';document.getElementById('campeon-nombre').textContent=campeon;}
+  else box.style.display='none';
 }
 
 function renderRonda(ri){
@@ -533,23 +517,15 @@ function renderRonda(ri){
   const count=RONDA_COUNTS[ri];
   const teams=bracketState[ri]||[];
   const nextTeams=bracketState[ri+1]||[];
-
   for(let mi=0;mi<count;mi++){
     const t1=teams[mi*2]||'?';
     const t2=teams[mi*2+1]||'?';
     const winner=nextTeams[mi]||null;
-    const isPlaceholder1=t1==='?';
-    const isPlaceholder2=t2==='?';
-
     const match=document.createElement('div');
     match.className='bracket-match';
     match.innerHTML=`
-      <div class="bracket-team ${winner===t1?'winner':''} ${isPlaceholder1?'placeholder':''}" onclick="pickWinner(${ri},${mi},0)">
-        <span class="bname">${t1}</span>
-      </div>
-      <div class="bracket-team ${winner===t2?'winner':''} ${isPlaceholder2?'placeholder':''}" onclick="pickWinner(${ri},${mi},1)">
-        <span class="bname">${t2}</span>
-      </div>`;
+      <div class="bracket-team ${winner===t1?'winner':''} ${t1==='?'?'placeholder':''}" onclick="pickWinner(${ri},${mi},0)"><span class="bname">${t1}</span></div>
+      <div class="bracket-team ${winner===t2?'winner':''} ${t2==='?'?'placeholder':''}" onclick="pickWinner(${ri},${mi},1)"><span class="bname">${t2}</span></div>`;
     container.appendChild(match);
   }
 }
@@ -558,48 +534,28 @@ function pickWinner(ronda,matchIdx,sideIdx){
   const teams=bracketState[ronda]||[];
   const winner=teams[matchIdx*2+sideIdx];
   if(!winner||winner==='?')return;
-
   if(!bracketState[ronda+1])bracketState[ronda+1]=[];
   bracketState[ronda+1][matchIdx]=winner;
-
-  // Si ganó la final, es campeón
   if(ronda===4){
     bracketState[5]=[winner];
     document.getElementById('campeon-box').style.display='block';
     document.getElementById('campeon-nombre').textContent=winner;
-    const d=getUserData(currentUser);d.campeon=winner;saveUserData(currentUser,d);
   }
-
-  // Re-render esta ronda y la siguiente
-  renderRonda(ronda);
-  renderRonda(ronda+1);
+  renderRonda(ronda);renderRonda(ronda+1);
 }
 
-// ══════════════════════════════════════════════════
-//  BONUS PANEL
-// ══════════════════════════════════════════════════
-// Puntos base por acertar ganador (según imagen)
-// Catar=10, Empate=7, Suiza=2 son ejemplo; en la penka
-// usamos un sistema simplificado: ganador=10, empate=7
-function toggleBonus(pid){
-  const panel=document.getElementById('bonus-'+pid);
-  if(!panel)return;
-  panel.classList.toggle('open');
-}
-
-
+async function saveBracket(){
   const d=getUserData(currentUser);
   d.bracket=bracketState;
   if(bracketState[5]&&bracketState[5][0])d.campeon=bracketState[5][0];
-  saveUserData(currentUser,d);
   const btn=document.getElementById('save-bracket-btn');
-  btn.textContent='✅ Guardado!';btn.style.background='var(--verde-claro)';
+  btn.textContent='⏳ Guardando...';btn.disabled=true;
+  await saveUserData(currentUser,d);
+  btn.textContent='✅ Guardado!';btn.style.background='var(--verde-claro)';btn.disabled=false;
   setTimeout(()=>{btn.textContent='💾 Guardar bracket';btn.style.background='';},2000);
 }
 
-// ══════════════════════════════════════════════════
-//  RANKING COMPLETO
-// ══════════════════════════════════════════════════
+// == RANKING ==
 function renderRankingFull(){
   const users=getUsers();
   const ranking=Object.keys(users).map(u=>{
@@ -608,29 +564,21 @@ function renderRankingFull(){
     const bPicks=Object.values(dd.bracket||{}).flat().filter(Boolean).length;
     return{user:u,pred,bPicks,campeon:dd.campeon||'—'};
   }).sort((a,b)=>(b.pred+b.bPicks)-(a.pred+a.bPicks));
-
   document.getElementById('ranking-full').innerHTML=ranking.map((r,i)=>{
     const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
     const m=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
     return`<div class="rank-item">
       <div class="rank-pos ${pc}">${m||i+1}</div>
-      <div>
-        <div class="rank-name">${r.user}${r.user===currentUser?' <span style="color:var(--dorado-claro);font-size:.75rem">← tú</span>':''}</div>
-        <div style="font-size:.75rem;color:var(--texto2)">Campeón: ${r.campeon}</div>
-      </div>
-      <div style="text-align:right">
-        <div class="rank-pts">${r.pred} <span>grupos</span></div>
-        <div style="font-size:.75rem;color:var(--texto2)">${r.bPicks} picks bracket</div>
-      </div>
+      <div><div class="rank-name">${r.user}${r.user===currentUser?' <span style="color:var(--dorado-claro);font-size:.75rem">← tú</span>':''}</div><div style="font-size:.75rem;color:var(--texto2)">Campeón: ${r.campeon}</div></div>
+      <div style="text-align:right"><div class="rank-pts">${r.pred} <span>grupos</span></div><div style="font-size:.75rem;color:var(--texto2)">${r.bPicks} picks bracket</div></div>
     </div>`;
   }).join('')||'<div class="empty-state"><div class="icon">📊</div>Aún no hay participantes</div>';
 }
 
-// ══════════════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════════════
-(function init(){
-  const session=_lsGet('pm26_session');
+// == INIT ==
+(async function init(){
+  await dbLoad();
+  const session=localStorage.getItem('pm26_session');
   if(session&&getUsers()[session]){currentUser=session;loadApp();}
 })();
 </script>
