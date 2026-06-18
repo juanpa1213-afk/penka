@@ -292,10 +292,14 @@ let bracketState = {};
 //  PERSISTENCIA
 // ══════════════════════════════════════════════════
 let currentUser = null;
-function getUsers(){return JSON.parse(localStorage.getItem('pm26_users')||'{}');}
-function saveUsers(u){localStorage.setItem('pm26_users',JSON.stringify(u));}
-function getUserData(u){return JSON.parse(localStorage.getItem('pm26_data_'+u)||'{"grupos":{},"bracket":{},"campeon":""}');}
-function saveUserData(u,d){localStorage.setItem('pm26_data_'+u,JSON.stringify(d));}
+const _mem = {};
+function _lsGet(k){try{return localStorage.getItem(k);}catch(e){return _mem[k]||null;}}
+function _lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){_mem[k]=v;}}
+function _lsDel(k){try{localStorage.removeItem(k);}catch(e){delete _mem[k];}}
+function getUsers(){return JSON.parse(_lsGet('pm26_users')||'{}');}
+function saveUsers(u){_lsSet('pm26_users',JSON.stringify(u));}
+function getUserData(u){return JSON.parse(_lsGet('pm26_data_'+u)||'{"grupos":{},"bracket":{},"campeon":""}');}
+function saveUserData(u,d){_lsSet('pm26_data_'+u,JSON.stringify(d));}
 
 // ══════════════════════════════════════════════════
 //  AUTH
@@ -321,17 +325,17 @@ function register(){
   if(users[user])return showError('Este usuario ya existe');
   users[user]={pass,created:Date.now()};
   saveUsers(users);currentUser=user;
-  localStorage.setItem('pm26_session',user);loadApp();
+  _lsSet('pm26_session',user);loadApp();
 }
 function login(){
   const user=document.getElementById('log-user').value.trim().toLowerCase();
   const pass=document.getElementById('log-pass').value;
   const users=getUsers();
   if(!users[user]||users[user].pass!==pass)return showError('Usuario o contraseña incorrectos');
-  currentUser=user;localStorage.setItem('pm26_session',user);loadApp();
+  currentUser=user;_lsSet('pm26_session',user);loadApp();
 }
 function logout(){
-  currentUser=null;localStorage.removeItem('pm26_session');
+  currentUser=null;_lsDel('pm26_session');
   document.getElementById('auth-section').style.display='block';
   document.getElementById('app-section').style.display='none';
   document.getElementById('navbar').style.display='none';
@@ -626,7 +630,7 @@ function renderRankingFull(){
 //  INIT
 // ══════════════════════════════════════════════════
 (function init(){
-  const session=localStorage.getItem('pm26_session');
+  const session=_lsGet('pm26_session');
   if(session&&getUsers()[session]){currentUser=session;loadApp();}
 })();
 </script>
