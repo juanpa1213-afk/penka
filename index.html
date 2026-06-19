@@ -247,27 +247,77 @@
 </div>
 
 <script>
-const GRUPOS_REAL = {
-  A:{equipos:[["🇲🇽","México"],["🇺🇸","EE.UU."],["🇨🇦","Canadá"],["🇩🇿","Argelia"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  B:{equipos:[["🇦🇷","Argentina"],["🇲🇦","Marruecos"],["🇺🇾","Uruguay"],["🇪🇨","Ecuador"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  C:{equipos:[["🇧🇷","Brasil"],["🇯🇵","Japón"],["🏴󠁧󠁢󠁥󠁮󠁧󠁿","Inglaterra"],["🇸🇦","Arabia S."]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  D:{equipos:[["🇫🇷","Francia"],["🇳🇱","P.Bajos"],["🇧🇪","Bélgica"],["🇦🇿","Azerbaiyán"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  E:{equipos:[["🇩🇪","Alemania"],["🇵🇹","Portugal"],["🇪🇸","España"],["🇿🇼","Zimbabwe"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  F:{equipos:[["🇭🇷","Croacia"],["🇸🇳","Senegal"],["🇦🇺","Australia"],["🇰🇪","Kenia"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  G:{equipos:[["🇹🇷","Turquía"],["🇵🇱","Polonia"],["🇺🇦","Ucrania"],["🇨🇱","Chile"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  H:{equipos:[["🇰🇷","Corea Sur"],["🇷🇸","Serbia"],["🇨🇴","Colombia"],["🇬🇭","Ghana"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  I:{equipos:[["🇮🇷","Irán"],["🇯🇴","Jordania"],["🇵🇭","Filipinas"],["🇳🇿","N.Zelanda"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  J:{equipos:[["🇨🇲","Camerún"],["🇧🇴","Bolivia"],["🇳🇬","Nigeria"],["🇿🇦","Sudáfrica"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  K:{equipos:[["🇮🇹","Italia"],["🇸🇪","Suecia"],["🇨🇭","Suiza"],["🇵🇦","Panamá"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-  L:{equipos:[["🇩🇰","Dinamarca"],["🇸🇰","Eslovaquia"],["🇷🇴","Rumania"],["🇬🇷","Grecia"]],partidos:[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]},
-};
+// == DATOS DESDE CSV ==
+// Rutas relativas (deben estar en el mismo repo que index.html)
+const CSV_GRUPOS      = 'grupos.csv';
+const CSV_PARTIDOS    = 'partidos.csv';
+const CSV_BRACKET     = 'bracket.csv';
+const CSV_PROBS       = 'probabilidades.csv';
 
-const BRACKET_INIT = [
-  "1°A","2°B","1°C","2°D","1°E","2°F","1°G","2°H",
-  "1°I","2°J","1°K","2°L","1°B","3°(A/B/C)","1°D","3°(D/E/F)",
-  "2°A","3°(G/H/I)","2°C","3°(J/K/L)","2°E","1°F","2°G","1°H",
-  "2°I","1°J","2°K","1°L","2°L","3°(mix1)","2°J","3°(mix2)",
-];
+let GRUPOS_REAL  = {};
+let BRACKET_INIT = [];
+let PROBS_DATA   = {}; // key: "GRUPO-partidoIdx" → {local, empate, visitante}
+
+function parseCSV(text){
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',');
+  return lines.slice(1).map(line => {
+    // split respetando comas dentro de emojis (ningún campo tiene comas, así que split simple)
+    const vals = line.split(',');
+    const obj = {};
+    headers.forEach((h, i) => obj[h.trim()] = (vals[i]||'').trim());
+    return obj;
+  });
+}
+
+async function loadCSVs(){
+  try {
+    const [rGrupos, rPartidos, rBracket, rProbs] = await Promise.all([
+      fetch(CSV_GRUPOS),
+      fetch(CSV_PARTIDOS),
+      fetch(CSV_BRACKET),
+      fetch(CSV_PROBS),
+    ]);
+    const [tGrupos, tPartidos, tBracket, tProbs] = await Promise.all([
+      rGrupos.text(), rPartidos.text(), rBracket.text(), rProbs.text()
+    ]);
+
+    // -- grupos.csv → GRUPOS_REAL (equipos)
+    const rowsGrupos = parseCSV(tGrupos);
+    rowsGrupos.forEach(r => {
+      if(!GRUPOS_REAL[r.grupo]) GRUPOS_REAL[r.grupo] = {equipos:[], partidos:[]};
+      GRUPOS_REAL[r.grupo].equipos[parseInt(r.pos)] = [r.bandera, r.nombre];
+    });
+
+    // -- partidos.csv → GRUPOS_REAL (partidos)
+    const rowsPartidos = parseCSV(tPartidos);
+    rowsPartidos.forEach(r => {
+      if(!GRUPOS_REAL[r.grupo]) GRUPOS_REAL[r.grupo] = {equipos:[], partidos:[]};
+      GRUPOS_REAL[r.grupo].partidos[parseInt(r.partido_idx)] = [parseInt(r.local_pos), parseInt(r.visitante_pos)];
+    });
+
+    // -- bracket.csv → BRACKET_INIT
+    const rowsBracket = parseCSV(tBracket);
+    rowsBracket.sort((a,b) => parseInt(a.slot)-parseInt(b.slot));
+    BRACKET_INIT = rowsBracket.map(r => r.etiqueta);
+
+    // -- probabilidades.csv → PROBS_DATA
+    const rowsProbs = parseCSV(tProbs);
+    rowsProbs.forEach(r => {
+      const key = `${r.grupo}-${r.partido_idx}`;
+      PROBS_DATA[key] = {
+        local: parseInt(r.prob_local),
+        empate: parseInt(r.prob_empate),
+        visitante: parseInt(r.prob_visitante)
+      };
+    });
+
+  } catch(e){
+    console.error('Error cargando CSVs:', e);
+    // Fallback vacío: la app mostrará grupos vacíos
+  }
+}
+
 const RONDAS = ['Ronda de 32','Octavos','Cuartos','Semis','Final'];
 const RONDA_COUNTS = [16,8,4,2,1];
 let bracketState = {};
@@ -456,11 +506,12 @@ function renderGrupos(){
         </div>
         <div class="bonus-panel" id="bonus-${pid}">
           <div class="bonus-title">🎯 Sistema de puntos</div>
-          <div class="winner-probs">
-            <div class="prob-pill"><div class="pteam">${nA}</div><div class="ppts">10</div><div class="pprob">pts si gana</div></div>
-            <div class="prob-pill empate"><div class="pteam">Empate</div><div class="ppts">7</div><div class="pprob">pts si empata</div></div>
-            <div class="prob-pill"><div class="pteam">${nB}</div><div class="ppts">10</div><div class="pprob">pts si gana</div></div>
-          </div>
+          <div class="winner-probs">${(()=>{
+            const pr=PROBS_DATA[`${letra}-${pi}`]||{local:33,empate:34,visitante:33};
+            return`<div class="prob-pill"><div class="pteam">${nA}</div><div class="ppts">${pr.local}%</div><div class="pprob">prob. gana</div></div>
+            <div class="prob-pill empate"><div class="pteam">Empate</div><div class="ppts">${pr.empate}%</div><div class="pprob">prob. empate</div></div>
+            <div class="prob-pill"><div class="pteam">${nB}</div><div class="ppts">${pr.visitante}%</div><div class="pprob">prob. gana</div></div>`;
+          })()}</div>
           <div style="margin-top:10px;">
             <div class="bonus-title">✨ Bonificaciones adicionales</div>
             <div class="bonus-grid">
@@ -684,7 +735,10 @@ function showToast(msg){
 
 // == INIT ==
 (async function init(){
+  setLoading(true,'Cargando datos del torneo…');
+  await loadCSVs();
   await dbLoad();
+  setLoading(false);
   const session=localStorage.getItem('pm26_session');
   if(session&&getUsers()[session]){currentUser=session;loadApp();}
 })();
