@@ -168,20 +168,20 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <h1>Penka <span>2026</span></h1>
-      <p id="auth-subtitle">Regístrate para hacer tus predicciones del Mundial</p>
+      <p id="auth-subtitle">Ingresa con tu cuenta</p>
       <div id="error-box" class="error-msg"></div>
-      <div id="form-register">
+      <div id="form-login">
+        <div class="field"><label>Usuario</label><input type="text" id="log-user" placeholder="Tu nombre de usuario" autocomplete="off"></div>
+        <div class="field"><label>Contraseña</label><input type="password" id="log-pass" placeholder="Tu contraseña"></div>
+        <button class="btn-primary" onclick="login()">Iniciar sesión</button>
+        <div class="auth-toggle">¿No tienes cuenta? <a onclick="toggleAuth()">Crear cuenta</a></div>
+      </div>
+      <div id="form-register" style="display:none">
         <div class="field"><label>Nombre de usuario</label><input type="text" id="reg-user" placeholder="ej: camilo_2026" autocomplete="off"></div>
         <div class="field"><label>Contraseña</label><input type="password" id="reg-pass" placeholder="Mínimo 4 caracteres"></div>
         <div class="field"><label>Confirmar contraseña</label><input type="password" id="reg-pass2" placeholder="Repite tu contraseña"></div>
         <button class="btn-primary" onclick="register()">Crear cuenta</button>
         <div class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuth()">Inicia sesión</a></div>
-      </div>
-      <div id="form-login" style="display:none">
-        <div class="field"><label>Usuario</label><input type="text" id="log-user" placeholder="Tu nombre de usuario" autocomplete="off"></div>
-        <div class="field"><label>Contraseña</label><input type="password" id="log-pass" placeholder="Tu contraseña"></div>
-        <button class="btn-primary" onclick="login()">Entrar</button>
-        <div class="auth-toggle">¿No tienes cuenta? <a onclick="toggleAuth()">Regístrate</a></div>
       </div>
     </div>
   </div>
@@ -323,13 +323,13 @@ async function saveUserData(u,d){
 }
 
 // == AUTH ==
-let authMode='register';
+let authMode='login';
 function showError(msg){const e=document.getElementById('error-box');e.textContent=msg;e.style.display='block';setTimeout(()=>e.style.display='none',3500);}
 function toggleAuth(){
-  authMode=authMode==='register'?'login':'register';
+  authMode=authMode==='login'?'register':'login';
   document.getElementById('form-register').style.display=authMode==='register'?'block':'none';
   document.getElementById('form-login').style.display=authMode==='login'?'block':'none';
-  document.getElementById('auth-subtitle').textContent=authMode==='register'?'Regístrate para hacer tus predicciones del Mundial':'Ingresa con tu cuenta';
+  document.getElementById('auth-subtitle').textContent=authMode==='login'?'Ingresa con tu cuenta':'Regístrate para hacer tus predicciones del Mundial';
   document.getElementById('error-box').style.display='none';
 }
 
