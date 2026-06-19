@@ -556,21 +556,32 @@ async function saveBracket(){
 }
 
 // == RANKING ==
+function calcTotalPuntos(dd){
+  let total=0;
+  Object.values(dd.puntos||{}).forEach(g=>Object.values(g).forEach(p=>total+=p));
+  return total;
+}
+
 function renderRankingFull(){
   const users=getUsers();
+  const hayResultados=_db&&_db.resultados&&Object.keys(_db.resultados).length>0;
   const ranking=Object.keys(users).map(u=>{
-    const dd=getUserData(u);let pred=0;
+    const dd=getUserData(u);
+    let pred=0;
     Object.values(dd.grupos||{}).forEach(g=>Object.values(g).forEach(p=>{if(p.local!==''&&p.visitante!=='')pred++;}));
-    const bPicks=Object.values(dd.bracket||{}).flat().filter(Boolean).length;
-    return{user:u,pred,bPicks,campeon:dd.campeon||'—'};
-  }).sort((a,b)=>(b.pred+b.bPicks)-(a.pred+a.bPicks));
+    const pts=calcTotalPuntos(dd);
+    return{user:u,pred,pts,campeon:dd.campeon||'—'};
+  }).sort((a,b)=>hayResultados?(b.pts-a.pts):(b.pred-a.pred));
+
+  const label=hayResultados?'pts':'pred.';
   document.getElementById('ranking-full').innerHTML=ranking.map((r,i)=>{
     const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
     const m=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    const val=hayResultados?r.pts:r.pred;
     return`<div class="rank-item">
       <div class="rank-pos ${pc}">${m||i+1}</div>
-      <div><div class="rank-name">${r.user}${r.user===currentUser?' <span style="color:var(--dorado-claro);font-size:.75rem">← tú</span>':''}</div><div style="font-size:.75rem;color:var(--texto2)">Campeón: ${r.campeon}</div></div>
-      <div style="text-align:right"><div class="rank-pts">${r.pred} <span>grupos</span></div><div style="font-size:.75rem;color:var(--texto2)">${r.bPicks} picks bracket</div></div>
+      <div><div class="rank-name">${r.user}${r.user===currentUser?' <span style="color:var(--dorado-claro);font-size:.75rem">← tú</span>':''}</div><div style="font-size:.75rem;color:var(--texto2)">Campeón: ${r.campeon} · ${r.pred} pred.</div></div>
+      <div style="text-align:right"><div class="rank-pts">${val} <span>${label}</span></div></div>
     </div>`;
   }).join('')||'<div class="empty-state"><div class="icon">📊</div>Aún no hay participantes</div>';
 }
