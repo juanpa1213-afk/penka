@@ -112,6 +112,7 @@
   .score-box{display:flex;gap:5px;align-items:center;}
   .score-input{width:36px;height:36px;text-align:center;background:var(--fondo3);border:1px solid var(--borde);border-radius:8px;color:var(--texto);font-size:1rem;font-weight:700;outline:none;transition:.15s;}
   .score-input:focus{border-color:var(--dorado-claro);background:rgba(240,180,41,.07);}
+  .score-done{border-color:var(--verde-claro)!important;background:rgba(37,163,102,.1)!important;}
   .score-sep{color:var(--texto2);font-weight:700;font-size:1rem;}
   .btn-info{background:none;border:none;color:var(--texto2);font-size:1rem;cursor:pointer;padding:2px 4px;transition:.15s;line-height:1;}
   .btn-info:hover{color:var(--dorado-claro);}
@@ -161,6 +162,7 @@
   <button class="tab" onclick="showTab('grupos',this)">⚽ Grupos</button>
   <button class="tab" onclick="showTab('eliminatorias',this)">🏆 Eliminatorias</button>
   <button class="tab" onclick="showTab('ranking',this)">📊 Ranking</button>
+  <button class="tab" id="tab-admin" style="display:none" onclick="showTab('admin',this)">⚙️ Resultados</button>
 </div>
 
 <!-- AUTH -->
@@ -232,6 +234,13 @@
     <main>
       <div class="section-title">Tabla de posiciones</div>
       <div class="ranking-grid" id="ranking-full"></div>
+    </main>
+  </div>
+
+  <div id="page-admin" class="page">
+    <main>
+      <div class="section-title">⚙️ Ingresar resultados</div>
+      <div id="admin-grupos"></div>
     </main>
   </div>
 
@@ -381,6 +390,7 @@ function showTab(name,el){
   if(name==='grupos')renderGrupos();
   if(name==='eliminatorias')renderBracket();
   if(name==='ranking')renderRankingFull();
+  if(name==='admin')renderAdminGrupos();
   if(name==='inicio')renderInicio();
 }
 
@@ -390,6 +400,7 @@ function loadApp(){
   document.getElementById('navbar').style.display='flex';
   document.getElementById('tabbar').style.display='flex';
   document.getElementById('nav-username').textContent=currentUser;
+  document.getElementById('tab-admin').style.display=currentUser==='juanpa'?'block':'none';
   renderInicio();
 }
 
@@ -584,6 +595,91 @@ function renderRankingFull(){
       <div style="text-align:right"><div class="rank-pts">${val} <span>${label}</span></div></div>
     </div>`;
   }).join('')||'<div class="empty-state"><div class="icon">📊</div>Aún no hay participantes</div>';
+}
+
+
+// == ADMIN (solo juanpa) ==
+const ADMIN_USER = 'juanpa';
+
+function calcPuntos(rl, rv, pl, pv){
+  rl=parseInt(rl); rv=parseInt(rv); pl=parseInt(pl); pv=parseInt(pv);
+  if(isNaN(rl)||isNaN(rv)||isNaN(pl)||isNaN(pv)) return 0;
+  const resReal=rl>rv?'L':rl<rv?'V':'E';
+  const resPred=pl>pv?'L':pl<pv?'V':'E';
+  if(resReal!==resPred) return 0;
+  let pts=10;
+  if(pl===rl&&pv===rv){ return pts+5; }
+  if(resReal==='L'&&pl===rl) pts+=3;
+  else if(resReal==='V'&&pv===rv) pts+=3;
+  if((rl-rv)===(pl-pv)) pts+=2;
+  if(resReal==='L'&&pv===rv) pts+=1;
+  else if(resReal==='V'&&pl===rl) pts+=1;
+  if(Math.abs(rl-rv)>=4) pts+=1;
+  return pts;
+}
+
+function renderAdminGrupos(){
+  if(currentUser!==ADMIN_USER) return;
+  const res=(_db&&_db.resultados)||{};
+  const container=document.getElementById('admin-grupos');
+  container.innerHTML='';
+  Object.entries(GRUPOS_REAL).forEach(([letra,grupo])=>{
+    const block=document.createElement('div');
+    block.style.marginBottom='16px';
+    const rows=grupo.partidos.map((par,pi)=>{
+      const[ai,bi]=par;
+      const[fA,nA]=grupo.equipos[ai];
+      const[fB,nB]=grupo.equipos[bi];
+      const saved=(res[letra]&&res[letra][pi])||{local:'',visitante:''};
+      const done=saved.local!==''&&saved.visitante!=='';
+      return`<div class="partido-card">
+        <div class="partido-main">
+          <div class="team-block"><span class="flag">${fA}</span><span class="tname">${nA}</span></div>
+          <div class="score-box">
+            <input class="score-input ${done?'score-done':''}" id="rl-${letra}-${pi}" type="number" min="0" max="20" value="${saved.local}" placeholder="—">
+            <span class="score-sep">:</span>
+            <input class="score-input ${done?'score-done':''}" id="rv-${letra}-${pi}" type="number" min="0" max="20" value="${saved.visitante}" placeholder="—">
+          </div>
+          <div class="team-block right"><span class="flag">${fB}</span><span class="tname">${nB}</span></div>
+          <button class="btn-info" id="abtn-${letra}-${pi}" onclick="guardarResultado('${letra}',${pi})" style="background:${done?'var(--verde-claro)':'var(--dorado)'};color:${done?'#fff':'#000'};border-radius:6px;padding:4px 8px;font-size:.75rem;font-weight:700;border:none;cursor:pointer;white-space:nowrap;">${done?'✅':'Guardar'}</button>
+        </div>
+      </div>`;
+    }).join('');
+    block.innerHTML=`<div style="font-size:.75rem;font-weight:700;color:var(--texto2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Grupo ${letra}</div>${rows}`;
+    container.appendChild(block);
+  });
+}
+
+async function guardarResultado(grupo, pi){
+  const rl=document.getElementById('rl-'+grupo+'-'+pi).value.trim();
+  const rv=document.getElementById('rv-'+grupo+'-'+pi).value.trim();
+  if(rl===''||rv===''){showToast('⚠️ Ingresa ambos goles');return;}
+  const btn=document.getElementById('abtn-'+grupo+'-'+pi);
+  btn.textContent='⏳';btn.disabled=true;
+  if(!_db.resultados)_db.resultados={};
+  if(!_db.resultados[grupo])_db.resultados[grupo]={};
+  _db.resultados[grupo][pi]={local:rl,visitante:rv};
+  // Recalcular puntos de todos
+  const users=_db.users||{};
+  for(const u of Object.keys(users)){
+    const ud=(_db.data&&_db.data[u])||{grupos:{},bracket:{},campeon:''};
+    const pred=(ud.grupos&&ud.grupos[grupo]&&ud.grupos[grupo][pi]);
+    if(!ud.puntos)ud.puntos={};
+    if(!ud.puntos[grupo])ud.puntos[grupo]={};
+    ud.puntos[grupo][pi]=(pred&&pred.local!==''&&pred.visitante!=='')?calcPuntos(rl,rv,pred.local,pred.visitante):0;
+    if(!_db.data)_db.data={};
+    _db.data[u]=ud;
+  }
+  await dbSave();
+  btn.textContent='✅';btn.style.background='var(--verde-claro)';btn.style.color='#fff';btn.disabled=false;
+  showToast('✅ Resultado guardado y puntos calculados');
+}
+
+function showToast(msg){
+  let t=document.getElementById('toast-msg');
+  if(!t){t=document.createElement('div');t.id='toast-msg';t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a3a1a;border:1px solid var(--verde-claro);color:var(--verde-claro);border-radius:10px;padding:10px 20px;font-size:.85rem;font-weight:600;z-index:999;white-space:nowrap;';document.body.appendChild(t);}
+  t.textContent=msg;t.style.display='block';
+  setTimeout(()=>t.style.display='none',2500);
 }
 
 // == INIT ==
